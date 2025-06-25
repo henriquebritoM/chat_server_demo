@@ -1,36 +1,25 @@
 
-use std::{io::{self, BufRead, BufReader, Read, Write}, net::{TcpListener, TcpStream}, os::windows::process, path::Path};
+use std::{io::{BufRead, BufReader, Write}, net::{TcpListener, TcpStream}};
 
 use crate::test_tcp::test_connection;
 
 mod test_tcp;
 
 fn handle_client(mut stream: TcpStream) {
-    let mut client: Client = Client::new(stream);
-    let mut method: String = String::new();
-    let mut path: String = String::new();
-    let mut protocol: String = String::new();
+    let mut request: Request;
 
-    client.get_request();
-
-    println!("will get info");
-
-    (method, path, protocol) = client.get_info();
-
-    println!("info gotten");
-    println!("method: '{}', path: '{}', protocol: '{}'", &method, &path, &protocol);
-
-    if method != "GET" || protocol != "HTTP/1.1" {return;}  //  we only accept GET requests with HTTP/1.1 as protocol.
-
-    println!("valid method and protocol");
-
-    match path.as_str() {
-        "/" => client.handle_ok(),
-        "echo" => client.handle_echo(&path),
-        _ => client.handle_not_found(),
+    match Request::new(stream) {
+        Ok(req) => request = req,
+        Err(e) => {
+            eprintln!("some error ocurred: {}", e);
+            return;
+        }
     }
 
-    client.write_response();
+    match request.handle() {
+        Ok(_) => {},
+        Err(e) => eprintln!("some error ocurred: {}", e),
+    }
 }
 
 struct Request {
@@ -41,7 +30,7 @@ struct Request {
 }
 
 impl Request {
-    fn new(mut stream: TcpStream) -> std::io::Result<Request> {
+    fn new(stream: TcpStream) -> std::io::Result<Request> {
         let mut request = Request {
             stream: stream,
             method: String::new(),
@@ -84,12 +73,12 @@ impl Request {
         let buf_reader = BufReader::new(&self.stream);
         
         for str in buf_reader.lines() {
-            
-            if str?.is_empty() {break;}
-            request.push_str("{&str?}\r\n\r\n");
+            let str = str?;
+            if str.is_empty() {break;}
+            request.push_str(&format!("{}\r\n\r\n", str));
         }
     
-        println!("Request: {}", request);
+        // println!("Request: {:#?}", request);
     
         Ok(request)
     }
@@ -102,17 +91,20 @@ impl Request {
         match self.path.rsplit_once("/") {
             None => {},
             Some((str1, str2)) => {
-                content = str1;
-                target = str2;
+                content = str2;
+                target = str1;
             }
         }
 
+        // println!("path: {}, target: {}, content: {}", self.path, target, content);
+
         match target {
             "" => response = "HTTP/1.1 200 OK\r\n\r\n".to_string(),
-            "echo" => response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-length: {}\r\n\r\n{}", content.len(), content).to_string(),
+            "/echo" => response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-length: {}\r\n\r\n{}", content.len(), content).to_string(),
             _ => response = "HTTP/1.1 404 NOT FOUND\r\n\r\n".to_string(),
         }
 
+        // println!("Response: {:#?}", response);
         self.stream.write_all(response.as_bytes())?;
 
         Ok(())
@@ -120,87 +112,11 @@ impl Request {
     
 }
 
-struct Client {
-    stream: TcpStream,      //  The stream
-    request: Vec<String>,   //  Each line of the request is stored as an element in this vec
-    response: String        //  The Response
-}
-
-impl Client {
-
-    fn new(stream: TcpStream) -> Client {
-        return Client {
-            stream: stream, 
-            request: Vec::new(),
-            response: String::new(),
-        };
-    }
-
-    fn get_request(&mut self) {
-
-        let buf_reader = BufReader::new(&self.stream);
-        
-        for str in buf_reader.lines() {
-    
-            match str {
-                Ok(s) => {
-                    if s.is_empty() {break;}
-                    self.request.push(s);
-                },
-                Err(_) => {},
-            }
-            
-        }
-
-        println!("{:#?}", self.request);
-    }
-
-    //  Returns Method, Path, Protocol
-    fn get_info(&self) -> (String, String, String) {
-        let slices: Vec<&str> = self.request[0].split(' ').collect();
-        //  Get / abc/abc/abc HTTP/1.1
-        //   0  1      2
-        return (slices[0].to_owned(), slices[1].to_owned(), slices[2].to_owned());
-    }
-
-    fn handle_ok(&mut self) {
-        self.response.push_str("HTTP/1.1 200 OK\r\n\r\n");
-    }
-
-    fn handle_echo(&mut self, path: &str) {
-        //let content
-    }
-
-    fn handle_not_found(&mut self) {
-        self.response.push_str("HTTP/1.1 404 NOT FOUND\r\n\r\n");
-    }
-
-    fn get_response(&mut self) {
-
-        match self.request[0].as_str() {
-            "GET / HTTP/1.1" => self.response.push_str("HTTP/1.1 200 OK\r\n\r\n"),
-            "GET /echo/abc HTTP/1.1" => {
-
-            }
-            _ => self.response.push_str("HTTP/1.1 404 NOT FOUND\r\n\r\n"),
-        }
-
-        println!("{}", self.response);
-    }
-
-    //  takes ownership of the client to drop it after writing to stream
-    fn write_response(mut self) {
-        _ = self.stream.write_all(self.response.as_bytes());
-        _ = self.stream.shutdown(std::net::Shutdown::Both);
-    }
-}
-
 fn main() -> std::io::Result<()> {
     
     println!("Hello, world!");
 
     let listener = TcpListener::bind("localhost:9090")?;
-    let mut client: Client; 
 
     test_connection("localhost:9090")?;  //  Just a test
 
@@ -208,13 +124,8 @@ fn main() -> std::io::Result<()> {
 
         match  stream {
             Ok(stream) => {
-                println!("new stream!");
+                // println!("new stream!");
                 handle_client(stream);
-                // handle_client(stream);
-                // client = Client::new(stream);
-                // client.get_request();
-                // client.get_response();
-                // client.write_response();
             },
             Err(e) => eprintln!("{:#?}", e),
         }
