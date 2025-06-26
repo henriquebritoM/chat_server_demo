@@ -78,7 +78,7 @@ impl Request {
             request.push_str(&format!("{}\r\n\r\n", str));
         }
     
-        // println!("Request: {:#?}", request);
+        println!("Request: {:#?}", request);
     
         Ok(request)
     }
@@ -96,7 +96,7 @@ impl Request {
             }
         }
 
-        // println!("path: {}, target: {}, content: {}", self.path, target, content);
+        println!("path: {}, target: {}, content: {}", self.path, target, content);
 
         match target {
             "" => response = "HTTP/1.1 200 OK\r\n\r\n".to_string(),
@@ -104,7 +104,7 @@ impl Request {
             _ => response = "HTTP/1.1 404 NOT FOUND\r\n\r\n".to_string(),
         }
 
-        // println!("Response: {:#?}", response);
+        println!("Response: {:#?}", response);
         self.stream.write_all(response.as_bytes())?;
 
         Ok(())
@@ -116,15 +116,18 @@ fn main() -> std::io::Result<()> {
     
     println!("Hello, world!");
 
-    let listener = TcpListener::bind("localhost:9090")?;
+    let port = portpicker::pick_unused_port().expect("No ports availabe");
+    let listener = TcpListener::bind(("localhost", port))?;
+    
+    println!("Listening on \"localhost:{}\"", port);
 
-    test_connection("localhost:9090")?;  //  Just a test
+    test_connection(("localhost", port))?;  //  Just a test
 
     for stream in listener.incoming() {
 
         match  stream {
             Ok(stream) => {
-                // println!("new stream!");
+                println!("\n-----new stream!-----");
                 handle_client(stream);
             },
             Err(e) => eprintln!("{:#?}", e),
