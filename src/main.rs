@@ -1,9 +1,12 @@
 
-use std::{io::{BufRead, BufReader, Write}, net::{TcpListener, TcpStream}};
-
-use crate::test_tcp::test_connection;
+use std::{io::{BufRead, BufReader, Write}, net::TcpStream, path::Path};
+use std::env;
+use crate::{client::Client, server::Server, test_tcp::test_connection};
 
 mod test_tcp;
+mod client;
+mod server;
+mod socket_json_utils;
 
 fn handle_client(mut stream: TcpStream) {
     let mut request: Request;
@@ -41,6 +44,7 @@ impl Request {
         let mut request_first_line: String = String::new();
         let mut request_rest: String = String::new();
 
+        //  Move this block to a dedicated method/fn
         match request.read_request()?.split_once("\r\n\r\n") {
             None => {},
             Some((str1, str2)) => {
@@ -48,7 +52,8 @@ impl Request {
                 request_rest.push_str(str2);
             }
         }
-
+        
+        //  Move this block to a dedicated method/fn
         match request_first_line.split_once(" ") {
             None => {},
             Some((str1, str2)) => {
@@ -88,6 +93,7 @@ impl Request {
         let mut content: &str = "";
         let mut response: String = String::new();
         
+        //  Move this block to a dedicated method/fn
         match self.path.rsplit_once("/") {
             None => {},
             Some((str1, str2)) => {
@@ -112,26 +118,43 @@ impl Request {
     
 }
 
+fn get_mode() -> Option<String> {
+    
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() != 2 {
+        return None;
+    }
+    
+    Some(args[1].to_owned())
+}
+
+
 fn main() -> std::io::Result<()> {
     
-    println!("Hello, world!");
+    println!("Starting");
 
-    let port = portpicker::pick_unused_port().expect("No ports availabe");
-    let listener = TcpListener::bind(("localhost", port))?;
-    
-    println!("Listening on \"localhost:{}\"", port);
+    let mode = get_mode().expect("Selecione o modo [server|client]");
+    let json_path = Path::new("socket.json");
+    let mut server_on: bool = false;
 
-    test_connection(("localhost", port))?;  //  Just a test
+    match mode.as_str() {
 
-    for stream in listener.incoming() {
+        "server" => {
+            if !server_on {
+                Server::run(json_path);
+                server_on = true;
+            }
+            else {
+                println!("Já há um servidor ativo!");
+            }
 
-        match  stream {
-            Ok(stream) => {
-                println!("\n-----new stream!-----");
-                handle_client(stream);
-            },
-            Err(e) => eprintln!("{:#?}", e),
+        },
+
+        "client" => {
+
         }
+        _ => println!("Modo inválido, por favor digite 'server' ou 'client'"),
     }
 
     Ok(())
