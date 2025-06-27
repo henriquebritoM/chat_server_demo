@@ -47,15 +47,20 @@ impl Server {
 
         println!("New client connected! addr: {}", stream.peer_addr().unwrap());
 
-        let message = self.read_stream(&stream);
-
-        if message.is_err() {
-            return; 
-            /*  Failed to read from client, aborting */
+        loop {
+            let message = self.read_stream(&stream);
+    
+            if message.is_err() {
+                return; 
+                /*  Failed to read from client, aborting */
+            }
+    
+            if stream.write_all(message.unwrap().as_bytes()).is_err() {
+                return;
+                /* Do nothing if could not write to client */
+            };
+            
         }
-
-        /* Do nothing if could not write to client */
-        _ = stream.write_all(message.unwrap().as_bytes());
     }
 
     fn read_stream(&self, stream: &TcpStream) -> io::Result<String> {
