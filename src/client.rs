@@ -1,47 +1,63 @@
 use std::{io::{BufRead, BufReader, Write}, net::{SocketAddr, TcpStream}, path::Path};
+
 use crate::socket_json_utils::get_addr_from_json;
 
 pub struct Client {
     stream: TcpStream,
-    message: String,
 }
 
 impl Client {
     pub fn run(path:&Path) {
-        let mut client = Client::new(path);
+        let client_opt = Client::new(path);
+        let mut client: Client;
+        
+        let mut message: String = String::new();
+        let mut _response: String = String::new();
+
+        match client_opt {
+            Some(c) => client = c,
+            None => return,
+        }
 
         loop {
-            let mut message = String::new();
-            let mut response = String::new();
-
+            println!("Mensagem: ");
             std::io::stdin()
             .read_line(&mut message)
             .expect("Failed to read input"); 
+            
+            message.push_str("\r\n");
+            let m_sent = client.send_message(message.as_str());     //  Retorna erro se o servidor se desconectar
 
-            client.set_message(message);
-            client.stream.write_all(client.message.as_bytes()) .unwrap();
+            if m_sent.is_err() {
+                println!("Servidor se desconectou!");
+                break;
+            }
 
-            response = client.read_response();
-            println!("Response from server: {}", response);
+            _response = client.read_response();
+            println!("Response from server: {}", _response);
         }
     }
 
-    pub fn new(path: &Path) -> Client {
+    pub fn new(path: &Path) -> Option<Client> {
         let addr = Client::get_addr(path);
-        let stream = TcpStream::connect(addr).expect("ERRO CONECTANDO CLIENTE A STREAM {}");
+        //  Esse erro aparece quando não há um servidor escutando a porta
+        //  transformar isso em um teste para ver se o servidor está online !
+        let stream = TcpStream::connect(addr);
 
-        Client { stream: stream, message: String::new() }
+        match stream {
+            Ok(strm) => return Some(Client { stream: strm } ),
+            Err(_) => return None,
+        }
     }
 
-    pub fn set_message(&mut self, message: String) {
-        self.message = format!("{}\r\n", message);
-    }
-
-    pub fn send_message(&mut self) {
-        let result_write = self.stream.write_all(self.message.as_bytes());
+    //  Escreve a mensagem passada para a stream
+    //  Se falhar, provavelmente o servidor se desconectou
+    pub fn send_message(&mut self, message: &str) -> Result<(), std::io::Error> {
+        let result_write = self.stream.write_all(message.as_bytes());
         
-        if result_write.is_err() {
-            println!("Houve erro ao mandar mensagem? {:?} ", result_write.err().unwrap());
+        match result_write {
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(e),
         }
     }
 
@@ -67,3 +83,4 @@ impl Client {
         get_addr_from_json(path)
     }
 }
+

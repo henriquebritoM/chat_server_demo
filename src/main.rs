@@ -29,16 +29,26 @@ fn main() -> std::io::Result<()> {
 
     let mode = get_mode().expect("Selecione o modo [server|client]");
     let json_path = Path::new("socket.json");
-    let mut _server_on: bool = false;   //  todo!   Apenas um servidor ativo por vez, cliente só conecta quando há um servidor ativo
+    let server_on: bool = Server::is_online(json_path);   //  todo!   Apenas um servidor ativo por vez, cliente só conecta quando há um servidor ativo
 
     match mode.as_str() {
 
-        "server" => {
-            Server::run(json_path)?;
+        "server" => { 
+            if server_on {
+                println!("Já há um servidor online!");
+            }
+            else {
+                Server::run(json_path)?;
+            }
         },
 
         "client" => {
-            Client::run(json_path);
+            if server_on {
+                Client::run(json_path);
+            }
+            else {
+                println!("Não há nenhum servidor ativo!")
+            }
 
         }
         _ => println!("Modo inválido, por favor digite 'server' ou 'client'"),

@@ -1,6 +1,6 @@
 use std::{io::{self, BufRead, BufReader, Error, Write}, net::{SocketAddr, TcpListener, TcpStream}, path::Path};
 
-use crate::socket_json_utils::send_addr_to_json;
+use crate::{client::Client, socket_json_utils::send_addr_to_json};
 
 pub struct Server {
     listener: TcpListener,
@@ -31,6 +31,7 @@ impl Server {
         let port = portpicker::pick_unused_port().expect("No ports availabe");
         let listener: TcpListener = TcpListener::bind(("localhost", port))?;
         
+        println!("\nServidor online");
         println!("Listening on \"localhost:{}\"", port);
 
         return Ok( Server { listener } );
@@ -41,7 +42,6 @@ impl Server {
         return self.listener.local_addr().unwrap();
     }
 
-
     // Echos client message
     fn handle_client(&self, mut stream: TcpStream) {
 
@@ -49,6 +49,7 @@ impl Server {
 
         loop {
             let message = self.read_stream(&stream);
+            println!("Mensagem lida");
     
             if message.is_err() {
                 return; 
@@ -63,21 +64,40 @@ impl Server {
         }
     }
 
-    fn read_stream(&self, stream: &TcpStream) -> io::Result<String> {
+    fn read_stream(&self, stream: &TcpStream) -> Result<String, ()> {
         
         let mut request: String = String::new();
         let buf_reader = BufReader::new(stream);
         
-        for str in buf_reader.lines() {
-            let str = str?;
-            if str.is_empty() {break;}
-
-            request.push_str(&format!("{}\r\n\r\n", str));
+        for str_result in buf_reader.lines() {
+            if str_result.is_err() {
+                break;
+            }
+            let str = str_result.unwrap();
+            if str.is_empty() {
+                break;
+            }
+            request.push_str(&str);
         }
+
+        if request.is_empty() {
+            return Err(());
+        }
+
+        request.push_str("\r\n\r\n");
     
         println!("Read from client: {:#?}", request);
     
         Ok(request)
+    }
+
+    pub fn is_online(json_path: &Path) -> bool{
+        
+        let client_opt = Client::new(json_path);
+        match client_opt {
+            Some(_) => return true,
+            None => return false,
+        }
     }
     
 }

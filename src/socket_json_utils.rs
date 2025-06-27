@@ -3,7 +3,7 @@ use serde_json::from_str;
 
 pub fn get_addr_from_json(path: &Path) -> SocketAddr {
 
-    check_file(path);
+    check_file(path).unwrap();
 
     let data: String = std::fs::read_to_string(path).unwrap();
 
@@ -16,11 +16,11 @@ pub fn get_addr_from_json(path: &Path) -> SocketAddr {
 
 pub fn send_addr_to_json(path: &Path, addr: SocketAddr) {
 
-    check_file(path);
+    check_file(path).unwrap();
 
     let socket_serialized: String = serde_json::to_string_pretty(&addr).unwrap();
 
-    std::fs::write(path, socket_serialized);
+    std::fs::write(path, socket_serialized).unwrap();
 }
 
 fn check_file(path: &Path) -> std::io::Result<()> {
