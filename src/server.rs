@@ -20,7 +20,7 @@ impl Server {
                 continue;   /* Ignore clients that could not connect */
             }
 
-            server.handle_client(stream.unwrap());
+            std::thread::spawn(move || Server::handle_client(stream.unwrap()) );
         }
 
         Ok(())
@@ -43,20 +43,24 @@ impl Server {
     }
 
     // Echos client message
-    fn handle_client(&self, mut stream: TcpStream) {
+    //  Not a method, it is intended to be called on a separete thread
+    //  A method would move the self
+    fn handle_client(mut stream: TcpStream) {
 
         println!("New client connected! addr: {}", stream.peer_addr().unwrap());
 
         loop {
-            let message = self.read_stream(&stream);
-            println!("Mensagem lida");
+            let message_res = Server::read_stream(&stream);
     
-            if message.is_err() {
+            if message_res.is_err() {
                 return; 
                 /*  Failed to read from client, aborting */
             }
+
+            let mut message = message_res.unwrap();
+            message.push_str("\r\n\r\n");
     
-            if stream.write_all(message.unwrap().as_bytes()).is_err() {
+            if stream.write_all(message.as_bytes()).is_err() {
                 return;
                 /* Do nothing if could not write to client */
             };
@@ -64,7 +68,7 @@ impl Server {
         }
     }
 
-    fn read_stream(&self, stream: &TcpStream) -> Result<String, ()> {
+    fn read_stream(stream: &TcpStream) -> Result<String, ()> {
         
         let mut request: String = String::new();
         let buf_reader = BufReader::new(stream);
@@ -84,8 +88,6 @@ impl Server {
             return Err(());
         }
 
-        request.push_str("\r\n\r\n");
-    
         println!("Read from client: {:#?}", request);
     
         Ok(request)

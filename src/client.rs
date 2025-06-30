@@ -20,12 +20,13 @@ impl Client {
         }
 
         loop {
-            println!("Mensagem: ");
+            print!("Mensagem: ");
+            std::io::stdout().flush().unwrap();
             std::io::stdin()
             .read_line(&mut message)
             .expect("Failed to read input"); 
             
-            message.push_str("\r\n");
+            message.push_str("\r\n\r\n");    
             let m_sent = client.send_message(message.as_str());     //  Retorna erro se o servidor se desconectar
 
             if m_sent.is_err() {
@@ -34,8 +35,11 @@ impl Client {
             }
 
             _response = client.read_response();
-            println!("Response from server: {}", _response);
+            println!("Recebido: {}", _response.trim());
+
+            message.clear();
         }
+
     }
 
     pub fn new(path: &Path) -> Option<Client> {
@@ -73,7 +77,7 @@ impl Client {
             let str = str_result.unwrap();
             if str.is_empty() {break;}
 
-            response.push_str(&format!("{}\r\n\r\n", str));
+            response.push_str(&str);
         }
 
         response
