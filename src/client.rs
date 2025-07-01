@@ -7,25 +7,33 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn run(path:&Path) {
-        let client_opt = Client::new(path);
-        let mut client: Client;
+
+    /// Cuida de todo a lógica de um novo cliente.   <br>
+    /// Aborta com early return se não for possível criar o Client ou o servidor se desconectar     <br>
+    /// <br>
+    /// Recebe inputs do stdin, as envia para a self.stream e depois lê a resposta na self.stream
+    /// 
+    /// # panics
+    /// - Se houver algum problema com o stdin/stdout
+    pub fn run(path: &Path) {
+
+        let mut client: Client = match Client::new(path) {
+            Some(c) => c,
+            None => return,
+        };
         
         let mut message: String = String::new();
         let mut _response: String = String::new();
 
-        match client_opt {
-            Some(c) => client = c,
-            None => return,
-        }
-
         loop {
+            //  leitura das inputs
             print!("Mensagem: ");
             std::io::stdout().flush().unwrap();
             std::io::stdin()
             .read_line(&mut message)
             .expect("Failed to read input"); 
             
+            //  envio das inputs para a self.TcpStream
             message.push_str("\r\n\r\n");    
             let m_sent = client.send_message(message.as_str());     //  Retorna erro se o servidor se desconectar
 
@@ -34,6 +42,7 @@ impl Client {
                 break;
             }
 
+            //  leitura da resposta da self.TcpStream
             _response = client.read_response();
             println!("Recebido: {}", _response.trim());
 
@@ -42,9 +51,13 @@ impl Client {
 
     }
 
+    /// Cria um nova instância de Client <br>
+    /// Retorna None se:
+    /// - O arquivo do path estiver vazio ou não existir, nesse caso, também cria o arquivo-destinho <br>
+    /// - Houver algum erro conectando ao SocketAddr 
     pub fn new(path: &Path) -> Option<Client> {
-        let addr = Client::get_addr(path);
-        //  Esse erro aparece quando não há um servidor escutando a porta
+        let addr = Client::get_addr(path)?;
+        //  Esse erro aparece quando não há um servidor escutando a porta   <br>
         //  transformar isso em um teste para ver se o servidor está online !
         let stream = TcpStream::connect(addr);
 
@@ -54,8 +67,9 @@ impl Client {
         }
     }
 
-    //  Escreve a mensagem passada para a stream
-    //  Se falhar, provavelmente o servidor se desconectou
+    /// Envia a message passada para a self.stream  <br>
+    /// Retorna um std::io::Error se houver algum enquando envia a message, geralmente
+    /// porque o TcpListener se desconectou.
     pub fn send_message(&mut self, message: &str) -> Result<(), std::io::Error> {
         let result_write = self.stream.write_all(message.as_bytes());
         
@@ -65,6 +79,11 @@ impl Client {
         }
     }
 
+    /// Retorna a String lida na self.stream. <br>
+    /// Blocking - Essa função espera até algo ser enviado pela stream
+    /// 
+    /// # panics
+    /// - Se houver algum erro lendo a stream
     pub fn read_response(&mut self) -> String {
         let mut response = String::new();
 
@@ -83,7 +102,9 @@ impl Client {
         response
     }
 
-    fn get_addr(path: &Path) -> SocketAddr {
+    /// Retorna um SocketAddr do arquivo json passado
+    /// Retona None se o arquivo estiver vazio
+    fn get_addr(path: &Path) -> Option<SocketAddr> {
         get_addr_from_json(path)
     }
 }
