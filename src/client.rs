@@ -2,6 +2,8 @@ use std::{io::{BufRead, BufReader, Write}, net::{SocketAddr, TcpStream}, path::P
 
 use crate::socket_json_utils::get_addr_from_json;
 
+/// Struct Client
+/// contém as funções e métodos para gerenciar toda a parte do do lado client
 pub struct Client {
     stream: TcpStream,
 }
@@ -15,12 +17,7 @@ impl Client {
     /// 
     /// # panics
     /// - Se houver algum problema com o stdin/stdout
-    pub fn run(path: &Path) {
-
-        let mut client: Client = match Client::new(path) {
-            Some(c) => c,
-            None => return,
-        };
+    pub fn run(mut client: Client) {
         
         let mut message: String = String::new();
         let mut _response: String = String::new();
