@@ -3,9 +3,11 @@ use std::path::Path;
 use std::env;
 use crate::{client::Client, server::Server};
 
+mod message;
 mod client;
 mod server;
 mod socket_json_utils;
+mod channel_manager;
 
 //  Recebe o argumento que foi passado quando o programa foi chamado
 //  É de se esperar dois argumentos:
@@ -21,7 +23,6 @@ fn get_mode() -> Option<String> {
     
     Some(args[1].to_owned())
 }
-
 
 fn main() -> std::io::Result<()> {
     
