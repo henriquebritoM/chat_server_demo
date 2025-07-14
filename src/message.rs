@@ -2,6 +2,9 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+/// Struct Message
+/// Feito para ser passado entre threads,
+/// contem um texto e um id que identifica quem mandou
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub text: String,
@@ -12,6 +15,8 @@ pub struct Message {
 pub struct FromStrErr;
 
 impl Message {
+
+    /// Cria uma nova instância de Message
     pub fn new<T: ToString, U: Into<u16>>(text: T, id: U) -> Message {
         return Message {text: text.to_string(), sender_id: id.into() };
     }

@@ -3,7 +3,7 @@ use crate::socket_json_utils::get_addr_from_json;
 use crate::channel_manager::ClientChannelManager;
 
 /// Struct Client
-/// contém as funções e métodos para gerenciar toda a parte do do lado client
+/// contém os channels para comunicação com as threads e o handler para a stream
 pub struct Client {
     stream_handler: StreamHandler,
     channels: ClientChannelManager,
@@ -12,39 +12,34 @@ pub struct Client {
 impl Client {
 
     /// Cria um nova instância de Client <br>
-    /// Retorna None se:
-    /// - O arquivo do path estiver vazio ou não existir, nesse caso, também cria o arquivo-destinho <br>
-    /// - Houver algum erro conectando ao SocketAddr 
+    /// Retorna None se não for possível se conectar ao servidor
     pub fn new(path: &Path) -> Option<Client> {
-        let addr = Client::get_addr(path)?;
-        //  Esse erro aparece quando não há um servidor escutando a porta   <br>
-        //  transformar isso em um teste para ver se o servidor está online !
-        let stream = TcpStream::connect(addr);
 
-        match stream {
-            Err(_) => return None,
-            Ok(strm) => {
-                strm.set_nonblocking(true).unwrap();
-                let (tx, rx) = channel::<String>();
-                let channel_manager = ClientChannelManager::new(tx, rx);
-                let stream_handler = StreamHandler{ stream: strm };
-                return Some(Client { stream_handler: stream_handler, channels: channel_manager } )
+        //  None se não houver nada no socket.json (ou algo inválido)
+        let addr = Client::get_addr(path)?;
+        //  None quando não há um servidor escutando a porta
+        let stream = TcpStream::connect(addr).ok()?;
+
+        stream.set_nonblocking(true).unwrap();
+        let (tx, rx) = channel::<String>();
+        let channel_manager = ClientChannelManager::new(tx, rx);
+        let stream_handler = StreamHandler{ stream: stream };
+
+        return Some(Client { stream_handler: stream_handler, channels: channel_manager } )
             
-            },
-        }
     }
 
     /// Cuida de todo a lógica de um novo cliente.   <br>
-    /// Aborta com early return se não for possível criar o Client ou o servidor se desconectar     <br>
     /// <br>
-    /// Recebe inputs do stdin, as envia para a self.stream e depois lê a resposta na self.stream
-    /// 
-    /// # panics
-    /// - Se houver algum problema com o stdin/stdout
+    /// Monitora o stdin e a stream, envia as entradas io para a stream e da println no recebido pela stream
     pub fn run(mut client: Client) {
 
         println!("Conectado !");
 
+        //  Cria a thread que monitora o stdin
+        //  ela pode dar panic caso ocorra algum erro, 
+        //  parando de enviar mensagens para o channel
+        //  todo! desconectar client se stdin der problemas
         let temp_sender = client.channels.sender.clone();
         std::thread::spawn(|| IoHandler::read_io(&IoHandler { sender: temp_sender }));
         
@@ -55,16 +50,19 @@ impl Client {
             io_input = client.channels.receive();
             stream_message = client.stream_handler.read_stream();
 
+            //  Envia mensagens do IO para a stream
             match io_input {
                 None => {},
                 Some(strg) => {
                     let res = client.stream_handler.write_message(&strg);
                     if res.is_err() {
+                        //  Servidor se desconectou, break do main loop
                         break;
                     }
                 },
             }
 
+            //  Println das mensagens recebidas da stream
             match stream_message {
                 None => {},
                 Some(strg) => println!("<-{}", strg),
@@ -82,13 +80,17 @@ impl Client {
     }
 }
 
+/// Struct StreamHandler
+/// Implementa as operações básicas para interagir com a stream
 struct StreamHandler {
     stream: TcpStream,
 }
 
 impl StreamHandler {
 
-    /// Non blocking if stream is set to non-blocking
+    /// Recebe mensagens pela stream
+    /// Clients criados com Client::new() já vem com 
+    /// set_nonblocking(true
     fn read_stream(&self) -> Option<String> {
         
         let mut request: String = String::new();
@@ -132,6 +134,9 @@ impl StreamHandler {
     
 }
 
+/// Struct IoHandler
+/// Feito para ser usado em uma thread separada. <br>
+/// Recebe inputs do stdin e envia para o channel
 struct IoHandler {
     sender: Sender<String>,
 }
@@ -139,6 +144,10 @@ struct IoHandler {
 impl IoHandler {
 
     /// blocking
+    /// Recebe input do stdin e envia para o channel <br>
+    /// # panic <br>
+    /// - Se houver algum erro no stdin/stdout <br>
+    /// - Se não for possível enviar a mensagem pelo channel <br>
     fn read_io(&self) {
 
         loop {
