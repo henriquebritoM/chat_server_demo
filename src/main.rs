@@ -1,5 +1,5 @@
 
-use std::path::Path;
+use std::{path::Path, str::FromStr};
 use std::env;
 use crate::{client::Client, server::Server};
 
@@ -9,53 +9,82 @@ mod server;
 mod socket_json_utils;
 mod channel_manager;
 
-//  Recebe o argumento que foi passado quando o programa foi chamado
-//  É de se esperar dois argumentos:
-//  O path de execução e o mode
-//  Se forem passados mais ou menos parametros ocorreu um erro e retorna None
-fn get_mode() -> Option<String> {
-    
-    let args: Vec<String> = env::args().collect();
-    
-    if args.len() != 2 {
-        return None;
+enum InitMode {
+    Server,
+    Client,
+    Default
+}
+
+struct InvalidString;
+impl FromStr for InitMode {
+    type Err = InvalidString;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use InitMode::*;
+        match s.to_lowercase().as_str() {
+            "client" => return Ok(Client),
+            "server" => return Ok(Server),
+            "default" => return Ok(Default),
+            _ => return Err(InvalidString),
+        }
     }
+}
+
+///  Recebe o segundo argumento passado e o converte
+///  para o enum InitMode
+///  InitMode::Default é usado caso não sejam passados argumentos 
+///  Retorna None se o argumento não puder ser convertido
+fn get_mode() -> Option<InitMode> {
     
-    Some(args[1].to_owned())
+    let arg: String = env::args().nth(1).unwrap_or("default".to_string());
+    
+    return InitMode::from_str(&arg).ok();
+}
+
+/// Inicializa o programa de acordo com o modo passado
+fn init_on_mode(mode: InitMode, path: &Path) -> std::io::Result<()> {
+
+    let test_client: Option<Client> = Server::try_connection(path);
+    let server_on: bool = test_client.is_some(); 
+
+    match mode {
+        InitMode::Server => {
+            if server_on {
+                println!("Já há um servidor online");
+            }
+            else {
+                Server::run(path)?;
+            }
+        },
+        InitMode::Client => {
+            if server_on {
+                Client::run(test_client.unwrap());
+            }
+            else {
+                println!("Não há nenhum servidor ativo!")
+            }            
+        },
+        InitMode::Default => {
+            if server_on {
+                Client::run(test_client.unwrap());
+            }
+            else {
+                Server::run(path)?;
+            }
+        },
+    }
+
+    Ok(())
 }
 
 fn main() -> std::io::Result<()> {
     
     println!("Starting");
 
-    let mode = get_mode().expect("Selecione o modo [server|client]");
+    let mode: InitMode = get_mode().expect("Selecione o modo [server|client|default]");
     let json_path = Path::new("socket.json");
 
-    let test_client: Option<Client> = Server::try_connection(json_path);
-    let server_on: bool = test_client.is_some();   
-
-    match mode.as_str() {
-
-        "server" => { 
-            if server_on {
-                println!("Já há um servidor online!");
-            }
-            else {
-                Server::run(json_path)?;
-            }
-        },
-
-        "client" => {
-            if server_on {
-                Client::run(test_client.unwrap());
-            }
-            else {
-                println!("Não há nenhum servidor ativo!")
-            }
-
-        }
-        _ => println!("Modo inválido, por favor digite 'server' ou 'client'"),
-    }
+    init_on_mode(mode, json_path)?;  
 
     Ok(())
 }

@@ -193,6 +193,6 @@ impl ThreadHandler {
         /* Do nothing if could not write to client */
         let tcp_text = message.text + "\r\n\r\n";
         println!("{} mandando mensagem para o cliente", self.id);
-        self.stream.write_all(tcp_text.as_bytes()).unwrap();        //  Panic se o client tiver se desconectado todo()!
+        self.stream.write_all(tcp_text.as_bytes()).unwrap();        //  Panic se o client tiver se desconectado todo()! clean exit
     }
 }
